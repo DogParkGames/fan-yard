@@ -80,6 +80,12 @@ input[type=text]{width:100%; padding:11px; border-radius:10px; border:2px solid 
 .btn.small{padding:8px 13px; font-size:13.5px}
 .rankline{font-family:Oswald,sans-serif; font-size:19px; letter-spacing:.5px}
 .rankline b{color:var(--gold)}
+.trophies{display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-top:10px}
+.trophy{background:#12151a; border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center}
+.trophy .emo{font-size:28px}
+.trophy .tname{font-weight:900; font-size:13px; margin-top:4px}
+.trophy .tdesc{color:var(--mut); font-size:11.5px; font-weight:700}
+.trophy.locked{opacity:.38; filter:grayscale(1)}
 .mut{color:var(--mut)} .small{font-size:13px}
 .err{background:#3a1d1d; border:1px solid #6e3434; color:#ffb3b3; border-radius:12px; padding:14px; text-align:center; font-weight:800}
 footer{text-align:center; color:var(--mut); font-size:12.5px; margin-top:26px; line-height:1.6}
@@ -258,7 +264,7 @@ function gameCard(ev){
     '</div>';
   } else if(fin && pick && pick.pts !== null && pick.pts !== undefined){
     body = '<div class="result">You called ' + esc(pick.side === "home" ? ev.home.abbr : ev.away.abbr) + ' by ' + pick.margin + ' · Actual margin ' + pick.actualMargin +
-      '<span class="pts' + (pick.dh ? " dh" : "") + '">' + (pick.dh ? "DIRECT HIT · " : "") + pick.pts + ' PTS</span></div>' + marginBars(pick, ev);
+      '<span class="pts' + (pick.dh ? " dh" : "") + '">' + (pick.dh ? "🏆 DIRECT HIT · " : "") + pick.pts + ' PTS</span></div>' + marginBars(pick, ev);
   } else if(fin && pick){
     body = '<div class="result mut">Grading your pick...</div>';
   } else if(live && pick){
@@ -363,6 +369,36 @@ function rankTitle(points){
   if(points >= 250) return "Regular";
   return "Rookie";
 }
+function rankEmoji(points){
+  if(points >= 6000) return "🏆";
+  if(points >= 3000) return "👑";
+  if(points >= 1500) return "🔥";
+  if(points >= 750) return "🎯";
+  if(points >= 250) return "⭐";
+  return "🌱";
+}
+function trophyCase(){
+  const c = myCard(); const t = c.tot;
+  const sportsPlayed = Object.keys(SPORTS).filter(k => c.per[k].picks > 0).length;
+  const byWeek = {};
+  for(const id of Object.keys(save.picks)){ const p = save.picks[id];
+    if(p.pts !== null && p.pts !== undefined) byWeek[p.week] = (byWeek[p.week] || 0) + p.pts; }
+  const bestWeek = Math.max.apply(null, [0].concat(Object.values(byWeek)));
+  const graded = Object.values(save.picks).filter(p => p.pts !== null && p.pts !== undefined).sort((a, b) => new Date(a.date) - new Date(b.date));
+  let streak = 0, best = 0;
+  for(const p of graded){ if(p.pts > 0){ streak++; if(streak > best) best = streak; } else streak = 0; }
+  return [
+    {emo:"🏟️", name:"In the Yard", desc:"Score your first points", got: t.points > 0},
+    {emo:"💎", name:"Direct Hit", desc:"Call an exact margin", got: t.dh >= 1},
+    {emo:"🔥", name:"On Fire", desc:"Score in 5 straight graded picks", got: best >= 5},
+    {emo:"💯", name:"Century Week", desc:"100+ points in one week", got: bestWeek >= 100},
+    {emo:"🌎", name:"Full Yard", desc:"Score in all five sports", got: sportsPlayed >= 5},
+    {emo:"🎯", name:"Sharpshooter", desc:"Land 5 Direct Hits", got: t.dh >= 5},
+    {emo:"⭐", name:"Regular", desc:"Reach 250 total points", got: t.points >= 250},
+    {emo:"👑", name:"Yard Leader", desc:"Reach 3,000 total points", got: t.points >= 3000},
+    {emo:"🏆", name:"Yardstick Master", desc:"Reach 6,000 total points", got: t.points >= 6000}
+  ];
+}
 function pct(a, b){ return b ? Math.round(100 * a / b) : 0; }
 function statBars(label, rows){
   let h = '<div class="card"><div class="rankline">' + label + '</div>';
@@ -376,7 +412,7 @@ function renderYard(){
   const card = myCard();
   let h = '<div class="card"><div class="rankline">MY SCORE CARD</div>' +
     '<div style="margin:10px 0"><input type="text" id="fanName" placeholder="Your fan name" value="' + esc(save.name) + '"></div>' +
-    '<div class="rankline">Rank: <b>' + rankTitle(card.tot.points) + '</b> · ' + card.tot.points + ' total points · ' + card.tot.dh + ' Direct Hits</div></div>';
+    '<div class="rankline">Rank: ' + rankEmoji(card.tot.points) + ' <b>' + rankTitle(card.tot.points) + '</b> · ' + card.tot.points + ' total points · ' + card.tot.dh + ' Direct Hits</div></div>';
   h += '<div class="card"><table><tr><th>LEAGUE</th><th>POINTS</th><th>PICKS</th><th>WINS</th><th>WIN %</th><th>WINS W/ PTS %</th><th>DIRECT HITS</th></tr>';
   for(const k of Object.keys(SPORTS)){
     const s = card.per[k];
@@ -389,10 +425,14 @@ function renderYard(){
   const dhRows = [];
   for(const k of Object.keys(SPORTS)){ const s = card.per[k]; if(s.picks) dhRows.push([SPORTS[k].label + " DIRECT HIT %", pct(s.dh, s.picks)]); }
   if(dhRows.length) h += statBars("DIRECT HIT PERCENTS", dhRows);
+  const tc = trophyCase();
+  h += '<div class="card"><div class="rankline">🏆 TROPHY CASE · ' + tc.filter(x => x.got).length + ' of ' + tc.length + ' earned</div><div class="trophies">' +
+    tc.map(x => '<div class="trophy' + (x.got ? '' : ' locked') + '"><div class="emo">' + x.emo + '</div><div class="tname">' + x.name + '</div><div class="tdesc">' + x.desc + '</div></div>').join("") + '</div></div>';
   // Yard Board
   const board = [card].concat(save.board || []).slice().sort((a, b) => b.tot.points - a.tot.points);
   h += '<div class="card"><div class="rankline">THE YARD BOARD</div><table><tr><th>RANK</th><th>FAN</th><th>TITLE</th><th>POINTS</th><th>PICKS</th><th>WIN %</th><th>DIRECT HITS</th></tr>';
-  board.forEach((c, i) => { h += '<tr><td>' + (i + 1) + '</td><td>' + esc(c.name) + (c.name === card.name ? " (you)" : "") + '</td><td>' + rankTitle(c.tot.points) + '</td><td>' + c.tot.points + '</td><td>' + c.tot.picks + '</td><td>' + pct(c.tot.wins, c.tot.picks) + '%</td><td>' + c.tot.dh + '</td></tr>'; });
+  board.forEach((c, i) => { const medal = i === 0 ? "🏆" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
+    h += '<tr><td>' + medal + '</td><td>' + esc(c.name) + (c.name === card.name ? " (you)" : "") + '</td><td>' + rankEmoji(c.tot.points) + ' ' + rankTitle(c.tot.points) + '</td><td>' + c.tot.points + '</td><td>' + c.tot.picks + '</td><td>' + pct(c.tot.wins, c.tot.picks) + '%</td><td>' + c.tot.dh + '</td></tr>'; });
   h += '</table><div class="small mut" style="margin-top:8px">Trade season codes with friends: their card joins your board, yours joins theirs. The weekly leaderboard lives on Facebook, cards posted every Monday.</div>' +
     '<button class="btn" id="shareBtn">SHARE MY CARD</button> <button class="btn ghost" id="copyBtn">COPY MY SEASON CODE</button>' +
     '<div class="sharebox" id="shareBox"></div>' +
@@ -407,7 +447,7 @@ function renderYard(){
   nameInput.addEventListener("change", () => { save.name = nameInput.value.trim(); store(); refresh(false); });
   document.getElementById("shareBtn").addEventListener("click", () => {
     const c = myCard();
-    const text = "🏟️ FAN YARD · " + c.name + " · " + rankTitle(c.tot.points) + "\n" + c.tot.points + " points · " + c.tot.picks + " picks · " + pct(c.tot.wins, c.tot.picks) + "% winners · " + c.tot.dh + " Direct Hits\nPick the winner. Call the margin. Measure up: https://bizzybullets.github.io/fan-yard/";
+    const text = "🏟️ FAN YARD · " + c.name + " · " + rankEmoji(c.tot.points) + " " + rankTitle(c.tot.points) + "\n" + c.tot.points + " points · " + c.tot.picks + " picks · " + pct(c.tot.wins, c.tot.picks) + "% winners · " + c.tot.dh + " Direct Hits · " + trophyCase().filter(x => x.got).length + " trophies 🏆\nPick the winner. Call the margin. Measure up: https://bizzybullets.github.io/fan-yard/";
     const box = document.getElementById("shareBox"); box.style.display = "block"; box.textContent = text;
     if(navigator.share){ navigator.share({title:"Fan Yard", text:text}).catch(() => {}); }
   });
